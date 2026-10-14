@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "SiteBranding": {
+      "title": "SiteBranding",
+      "description": "Global website branding and trademark logo configuration persisted across sessions.",
+      "type": "object",
+      "properties": {
+        "logoUrl": {
+          "type": "string",
+          "description": "Public URL or self-contained Data URI of the active website trademark logo.",
+          "minLength": 1,
+          "maxLength": 950000
+        },
+        "storageUrl": {
+          "type": "string",
+          "description": "Optional Firebase Storage or server static URL for the uploaded logo.",
+          "minLength": 0,
+          "maxLength": 2048
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Original filename of the uploaded logo.",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "MIME type of the logo image.",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID or identifier of the administrator who updated the logo.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp."
+        }
+      },
+      "required": ["logoUrl", "fileName", "mimeType", "updatedBy", "createdAt", "updatedAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized administrator document for role-based access control.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "editor"],
+          "minLength": 5,
+          "maxLength": 10
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "role", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/site_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SiteBranding" },
+      "description": "Global site settings and branding configuration documents (e.g. /site_settings/branding)."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Trusted administrator registry for RBAC verification."
+    }
+  }
+}

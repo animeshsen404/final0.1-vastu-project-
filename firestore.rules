@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() && request.auth.token.email == 'animeshsenams123@gmail.com';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // 3. Entity Validation Blueprints (Synchronized with firebase-blueprint.json)
+    function isValidSiteBranding(data) {
+      return data.keys().hasAll(['logoUrl', 'fileName', 'mimeType', 'updatedBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['logoUrl', 'storageUrl', 'fileName', 'mimeType', 'updatedBy', 'createdAt', 'updatedAt']) &&
+        data.logoUrl is string && data.logoUrl.size() >= 1 && data.logoUrl.size() <= 950000 &&
+        (!('storageUrl' in data) || (data.storageUrl is string && data.storageUrl.size() >= 0 && data.storageUrl.size() <= 2048)) &&
+        data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 256 &&
+        data.mimeType is string && data.mimeType.size() >= 3 && data.mimeType.size() <= 64 &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        data.updatedBy == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['uid', 'role', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'role', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.role is string && data.role.size() >= 5 && data.role.size() <= 10 &&
+        (data.role == 'admin' || data.role == 'editor') &&
+        data.createdAt is timestamp;
+    }
+
+    // 4. Collection: /site_settings/{settingId}
+    match /site_settings/{settingId} {
+      // Public visitors and client apps read only the canonical 'branding' singleton document
+      allow get: if isValidId(settingId) && settingId == 'branding';
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+        isValidId(settingId) &&
+        settingId == 'branding' &&
+        isValidSiteBranding(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isSignedIn() &&
+        isValidId(settingId) &&
+        settingId == 'branding' &&
+        isValidSiteBranding(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['logoUrl', 'storageUrl', 'fileName', 'mimeType', 'updatedBy', 'updatedAt']) &&
+        isAdmin();
+
+      allow delete: if false;
+    }
+
+    // 5. Collection: /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+        isValidId(adminId) &&
+        isValidAdminUser(incoming()) &&
+        incoming().uid == adminId &&
+        incoming().createdAt == request.time &&
+        isAdmin();
+
+      allow update: if isSignedIn() &&
+        isValidId(adminId) &&
+        isValidAdminUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['role']) &&
+        isAdmin();
+
+      allow delete: if isSignedIn() && isValidId(adminId) && isAdmin();
+    }
+  }
+}
